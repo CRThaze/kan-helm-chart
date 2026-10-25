@@ -1,0 +1,111 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "kan.fullname" . }}
+  labels:
+    {{- include "kan.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "kan.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      annotations:
+        checksum/secret: {{ include (print $.Template.BasePath "/secret.yaml") . | sha256sum }}
+{{- with .Values.podAnnotations }}
+        {{- toYaml . | nindent 8 }}
+{{- end }}
+      labels:
+        {{- include "kan.labels" . | nindent 8 }}
+{{- with .Values.podLabels }}
+        {{- toYaml . | nindent 8 }}
+{{- end }}
+    spec:
+      automountServiceAccountToken: false
+{{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+{{- end }}
+{{- with .Values.podSecurityContext }}
+      securityContext:
+        {{- toYaml . | nindent 8 }}
+{{- end }}
+      initContainers:
+        {{- /* The app image never migrates; drizzle-kit is a no-op when the schema is current. */}}
+        - name: migrate
+          image: {{ include "kan.migrateImage" . | quote }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+{{- with .Values.securityContext }}
+          securityContext:
+            {{- toYaml . | nindent 12 }}
+{{- end }}
+          env:
+            - name: POSTGRES_URL
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "kan.secretName" . }}
+                  key: POSTGRES_URL
+{{- with .Values.resources }}
+          resources:
+            {{- toYaml . | nindent 12 }}
+{{- end }}
+      containers:
+        - name: {{ .Chart.Name }}
+          image: {{ include "kan.image" . | quote }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+{{- with .Values.securityContext }}
+          securityContext:
+            {{- toYaml . | nindent 12 }}
+{{- end }}
+          ports:
+            - name: http
+              containerPort: 3000
+              protocol: TCP
+          env:
+            {{- /* Next.js standalone listens on $HOSTNAME; pin it so a runtime-set pod hostname cannot narrow the bind. */}}
+            - name: HOSTNAME
+              value: "0.0.0.0"
+            - name: NEXT_PUBLIC_BASE_URL
+              value: {{ required "baseUrl is required (NEXT_PUBLIC_BASE_URL)" .Values.baseUrl | quote }}
+            - name: BETTER_AUTH_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "kan.secretName" . }}
+                  key: BETTER_AUTH_SECRET
+            - name: POSTGRES_URL
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "kan.secretName" . }}
+                  key: POSTGRES_URL
+{{- with .Values.env }}
+            {{- toYaml . | nindent 12 }}
+{{- end }}
+{{- with .Values.envFrom }}
+          envFrom:
+            {{- toYaml . | nindent 12 }}
+{{- end }}
+{{- with .Values.livenessProbe }}
+          livenessProbe:
+            {{- toYaml . | nindent 12 }}
+{{- end }}
+{{- with .Values.readinessProbe }}
+          readinessProbe:
+            {{- toYaml . | nindent 12 }}
+{{- end }}
+{{- with .Values.resources }}
+          resources:
+            {{- toYaml . | nindent 12 }}
+{{- end }}
+{{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+{{- end }}
+{{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+{{- end }}
+{{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+{{- end }}

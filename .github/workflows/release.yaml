@@ -1,0 +1,96 @@
+name: Release Helm Chart
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - charts/kan/**
+
+jobs:
+  update-readme:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          fetch-tags: true
+          ref: main
+          persist-credentials: false
+
+      - name: Save HEAD SHA before helm-docs
+        id: save-sha
+        run: |
+          echo "sha=$(git rev-parse HEAD)" >> $GITHUB_OUTPUT
+
+      - name: Render helm docs inside the README.md and push changes back to PR branch
+        uses: losisin/helm-docs-github-action@v1
+        with:
+          output-file: ../../README.md
+          template-files: README.md.gotmpl
+          git-push: false
+
+      - name: Check for README changes
+        id: check-changes
+        run: |
+          if git diff --quiet ${{ steps.save-sha.outputs.sha }} -- README.md
+          then
+            echo "has_changes=false" >> $GITHUB_OUTPUT
+          else
+            echo "has_changes=true" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Commit and push
+        if: steps.check-changes.outputs.has_changes == 'true'
+        run: |
+          git config --global user.name 'github-actions'
+          git config --global user.email '41898282+github-actions[bot]@users.noreply.github.com'
+
+          # stage any file changes to be committed
+          git add README.md
+
+          # make commit with staged changes
+          git commit -m 'Update README.md with helm-docs'
+
+      - name: Push changes
+        if: success()
+        uses: ad-m/github-push-action@master
+        with:
+          github_token: ${{ secrets.ACTIONS_PAT }}
+          branch: main
+
+  release:
+    runs-on: ubuntu-latest
+    needs:
+      - update-readme
+    permissions:
+      contents: write
+      packages: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          fetch-tags: true
+          ref: main
+
+      - name: Configure Git
+        run: |
+          git config --global user.name 'github-actions'
+          git config --global user.email '41898282+github-actions[bot]@users.noreply.github.com'
+
+      - name: Put README inside Chart
+        run: |
+          cp README.md charts/kan/
+
+      # Not ghcr.io/crthaze like pictshare: the fork's app image already lives at ghcr.io/crthaze/kan,
+      # which is where `helm push` would put a chart named kan.
+      - name: Run chart-releaser
+        uses: bitdeps/helm-oci-charts-releaser@v0.1.3
+        with:
+          oci_registry: ghcr.io/crthaze/charts
+          tag_name_pattern: ''
+          oci_username: CRThaze
+          oci_password: ${{ secrets.GITHUB_TOKEN }}
+          github_token: ${{ secrets.GITHUB_TOKEN }}

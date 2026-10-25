@@ -1,0 +1,114 @@
+# -- Number of replicas. Without `REDIS_URL` in `env`, rate limiting is counted per pod.
+replicaCount: 1
+
+image:
+  # -- Image Registry, shared by the app and migrate images (empty uses the runtime's default, Docker Hub).
+  registry: ghcr.io
+  # -- App image repository.
+  repository: kanbn/kan
+  # -- App image tag; may pin a digest (`0.6.0@sha256:...`).
+  # @default -- Uses `.Chart.appVersion`
+  tag: ""
+  # -- Image Pull Policy, shared by the app and migrate images.
+  pullPolicy: IfNotPresent
+
+imagePullSecrets: []
+
+migrate:
+  image:
+    # -- Migrate image repository. Upstream's workflow publishes it beside the app image with a
+    # `-migrate` suffix, so a fork's build follows `image.repository` without setting this.
+    # @default -- `<image.repository>-migrate`
+    repository: ""
+    # -- Migrate image tag. The schema must match the app, so it follows `image.tag`; set it
+    # explicitly when `image.tag` pins a digest, since a digest belongs to one image.
+    # @default -- `image.tag`
+    tag: ""
+
+# -- Public URL browsers use to reach Kan (`NEXT_PUBLIC_BASE_URL`). Required: auth callbacks and
+# trusted origins are checked against it.
+baseUrl: ""
+
+# -- Existing Secret holding the `BETTER_AUTH_SECRET` and `POSTGRES_URL` keys. When set, the chart
+# creates no Secret and ignores `auth.secret` and `database.url`.
+existingSecret: ""
+
+auth:
+  # -- `BETTER_AUTH_SECRET`, a random string of 32+ characters. Changing it signs every user out.
+  secret: ""
+
+database:
+  # -- `POSTGRES_URL`, e.g. `postgresql://kan:password@postgres:5432/kan`. Required: unset, Kan
+  # falls back to an in-container PGlite database that is lost on restart.
+  url: ""
+
+# -- Extra container env: SMTP, S3, OAuth/OIDC and the `NEXT_PUBLIC_*` toggles. Every variable is
+# listed in https://github.com/kanbn/kan/blob/main/.env.example
+env: []
+
+# -- Extra container envFrom sources, e.g. a Secret with S3 or OAuth credentials.
+envFrom: []
+
+# -- TCP only, so a database outage does not restart the pod.
+livenessProbe:
+  tcpSocket:
+    port: http
+
+# -- `/api/v1/health` answers 200 even when its database check fails, so this proves only that
+# the server responds.
+readinessProbe:
+  httpGet:
+    path: /api/v1/health
+    port: http
+  timeoutSeconds: 5
+
+# -- Resources for the app and migrate containers.
+resources: {}
+
+podAnnotations: {}
+
+podLabels: {}
+
+# -- Pod security context. `runAsUser` matters for the migrate image (`node:alpine`), which
+# would otherwise run as root; the app image already runs as 1000.
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 1000
+  runAsGroup: 1000
+  seccompProfile:
+    type: RuntimeDefault
+
+# -- Container security context for the app and migrate containers. The root filesystem stays
+# writable: at startup the app writes `public/__ENV.js` with the runtime `NEXT_PUBLIC_*` values.
+securityContext:
+  allowPrivilegeEscalation: false
+  capabilities:
+    drop:
+      - ALL
+
+service:
+  # -- Service Type.
+  type: ClusterIP
+  # -- Service Port.
+  port: 80
+
+ingress:
+  # -- Whether to use an Ingress for application access.
+  enabled: false
+  # -- Ingress class name.
+  className: ""
+  annotations: {}
+  # -- Hostnames routed to Kan; Kan serves only from `/`, so each host gets one `/` Prefix path.
+  # @default -- The host of `baseUrl`
+  hosts: []
+  tls: []
+
+nodeSelector: {}
+
+tolerations: []
+
+affinity: {}
+
+nameOverride: ""
+
+fullnameOverride: ""

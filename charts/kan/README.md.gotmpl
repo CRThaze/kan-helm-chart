@@ -1,0 +1,42 @@
+{{ template "chart.header" . }}
+{{ template "chart.deprecationWarning" . }}
+
+{{ template "chart.badgesSection" . }}
+
+{{ template "chart.description" . }}
+
+{{ template "chart.homepageLine" . }}
+
+{{ template "chart.maintainersSection" . }}
+
+{{ template "chart.sourcesSection" . }}
+
+{{ template "chart.requirementsSection" . }}
+
+### Installing
+
+```console
+helm install kan oci://ghcr.io/crthaze/charts/kan \
+  --set baseUrl=https://kan.example.com \
+  --set auth.secret="$(openssl rand -hex 32)" \
+  --set database.url=postgresql://kan:password@postgres:5432/kan
+```
+
+### Database and migrations
+
+Kan needs an external PostgreSQL database; the chart does not bundle one. The `kan-migrate`
+image runs as an init container on every rollout, so the schema always matches the app image.
+The migrations create the `uuid-ossp` and `pg_trgm` extensions, which the database owner can
+create without superuser.
+
+### Running a fork
+
+Upstream's workflow publishes the migrate image beside the app image as
+`<repository>-migrate`, and a fork running that workflow does the same, so setting
+`image.repository` and `image.tag` moves both images.
+
+### Parameters
+
+{{ template "chart.valuesSection" . }}
+
+{{ template "helm-docs.versionFooter" . }}

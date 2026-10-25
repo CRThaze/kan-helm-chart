@@ -1,0 +1,1 @@
+Kan is deployed at {{ .Values.baseUrl }}
